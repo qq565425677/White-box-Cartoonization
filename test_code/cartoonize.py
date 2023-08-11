@@ -5,6 +5,8 @@ import tensorflow.compat.v1 as tf
 import network
 import guided_filter
 from tqdm import tqdm
+from video_helper import is_video_file, video_to_frames, frames_to_video
+import shutil
 
 tf.disable_v2_behavior()
 
@@ -23,7 +25,7 @@ def resize_crop(image):
     return image
 
 
-def cartoonize(load_folder, save_folder, model_path):
+def _model_init(model_path):
     input_photo = tf.placeholder(tf.float32, [1, None, None, 3])
     network_out = network.unet_generator(input_photo)
     final_out = guided_filter.guided_filter(input_photo, network_out, r=1, eps=5e-3)
@@ -38,11 +40,30 @@ def cartoonize(load_folder, save_folder, model_path):
 
     sess.run(tf.global_variables_initializer())
     saver.restore(sess, tf.train.latest_checkpoint(model_path))
+
+    return input_photo, final_out, sess
+
+
+def _convert_video(input_photo, final_out, sess, load_folder, save_folder):
+    if not os.path.exists(save_folder):
+        os.mkdir(save_folder)
+
     name_list = os.listdir(load_folder)
     for name in tqdm(name_list):
+        if not os.path.isfile(os.path.join(load_folder, name)):
+            continue
         try:
+            if is_video_file(name):
+                tem_load_folder = os.path.join(load_folder, name[:-4])
+                tem_save_folder = os.path.join(save_folder, name[:-4])
+                video_to_frames(os.path.join(load_folder, name), tem_load_folder)
+                _convert_video(input_photo, final_out, sess, tem_load_folder, tem_save_folder)
+                frames_to_video(tem_save_folder, os.path.join(save_folder, name))
+                shutil.rmtree(tem_load_folder)
+                shutil.rmtree(tem_save_folder)
+
             load_path = os.path.join(load_folder, name)
-            save_path = os.path.join(save_folder, name)
+            save_path = os.path.os.path.join(save_folder, name)
             image = cv2.imread(load_path)
             image = resize_crop(image)
             batch_image = image.astype(np.float32) / 127.5 - 1
@@ -55,10 +76,13 @@ def cartoonize(load_folder, save_folder, model_path):
             print('cartoonize {} failed'.format(load_path))
 
 
+def cartoonize(load_folder, save_folder, model_path):
+    input_photo, final_out, sess = _model_init(model_path)
+    _convert_video(input_photo, final_out, sess, load_folder, save_folder)
+
+
 if __name__ == '__main__':
     model_path = 'saved_models'
     load_folder = 'test_images'
     save_folder = 'cartoonized_images'
-    if not os.path.exists(save_folder):
-        os.mkdir(save_folder)
     cartoonize(load_folder, save_folder, model_path)

@@ -1,3 +1,7 @@
+test_code/test_images
+test_code/saved_models
+test_code/cartoonized_images
+
 ### Python template
 # Byte-compiled / optimized / DLL files
 __pycache__/
